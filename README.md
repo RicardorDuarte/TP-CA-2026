@@ -40,17 +40,18 @@ openssl list -provider-path . -provider ca -cipher-algorithms -propquery provide
 | `TRIVIUM` | 10 bytes | 10 bytes | None |
 
 Example CBC encryption and decryption, using explicit hexadecimal test key/IV
-values and an existing `plaintext.bin`:
+values and an existing `input.txt`:
 
 ```sh
 openssl enc -provider-path . -provider ca -SPECK128-128-CBC \
   -K 000102030405060708090a0b0c0d0e0f -iv 101112131415161718191a1b1c1d1e1f \
-  -in plaintext.bin -out ciphertext.bin
+  -in input.txt -out ciphertext.txt
 
 openssl enc -d -provider-path . -provider ca -SPECK128-128-CBC \
   -K 000102030405060708090a0b0c0d0e0f -iv 101112131415161718191a1b1c1d1e1f \
-  -in ciphertext.bin -out recovered.bin
+  -in ciphertext.txt -out recovered.txt
 ```
+Example CTR using -nopad
 ```sh
 openssl enc -d -provider-path . -provider ca -SPECK128-128-CTR -nopad   \
 -K 000102030405060708090a0b0c0d0e0f   -iv 101112131415161718191a1b1c1d1e1f \
@@ -63,14 +64,14 @@ Example Trivium encryption and decryption:
 ```sh
 openssl enc -provider-path . -provider ca -TRIVIUM \
   -K 00010203040506070809 -iv 10111213141516171819 \
-  -in plaintext.bin -out ciphertext.bin
+  -in input.txt -out ciphertext.txt
 
 openssl enc -d -provider-path . -provider ca -TRIVIUM \
   -K 00010203040506070809 -iv 10111213141516171819 \
-  -in ciphertext.bin -out recovered.bin
+  -in ciphertext.txt -out recovered.txt
 ```
 
-Compare the recovered file with the original using `cmp plaintext.bin recovered.bin`.
+Compare the recovered file with the original using `cmp input.txt recovered.txt`.
 
 For `openssl speed`, load both `-provider default` and `-provider ca`: the
 default provider supplies the benchmark's random-key generation.
