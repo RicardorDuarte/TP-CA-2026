@@ -1,7 +1,4 @@
-/* Original cipher adapters using OpenSSL's public provider-cipher API:
- * https://docs.openssl.org/3.5/man7/provider-cipher/
- * Cipher cores retain their own algorithm attribution in speck128.c/trivium.c.
- */
+// callbacks: https://docs.openssl.org/3.5/man7/provider-cipher/
 #include "provider_cipher.h"
 #include "speck128.h"
 #include "trivium.h"
@@ -39,7 +36,7 @@ typedef struct {
     uint8_t keystream[16];
     size_t pending_length;
     size_t stream_position;
-    unsigned int padding;
+    unsigned int padding; //tudo a partir daqui ou e 0 ou 1
     int encrypting;
     int key_set;
     int iv_set;
@@ -92,7 +89,7 @@ static void cipher_freectx(void *vctx){
 }
 
 static void *cipher_dupctx(void *vctx){
-    // All mutable state is owned directly; the spec is immutable module data.
+    //o estado esta todo na struct nao ha buffers separados
     return OPENSSL_memdup(vctx, sizeof(cipher_ctx));
 }
 
@@ -258,7 +255,7 @@ static int cipher_init(void *vctx, const unsigned char *key, size_t key_length,
     next.failed = 0;
     next.initialized = 1;
 
-    // EVP may supply the algorithm, key and IV in separate initialization calls.
+    // key e iv podem chegar em chamadas diferentes
     if (next.key_set) {
         if (next.spec->mode == EVP_CIPH_STREAM_CIPHER) {
             if (next.iv_set) trivium_init(&next.core.trivium, next.key, next.original_iv);
@@ -302,7 +299,8 @@ static void process_block(cipher_ctx *ctx, const uint8_t input[16], uint8_t outp
             for (size_t i = 0; i < 16; ++i) block[i] ^= ctx->iv[i];
         }
         speck128_cipher_block(&ctx->core.speck, block, output);
-        if (ctx->spec->mode == EVP_CIPH_CBC_MODE) memcpy(ctx->iv, output, 16);
+        if (ctx->spec->mode == EVP_CIPH_CBC_MODE)
+            memcpy(ctx->iv, output, 16);
     } else {
         speck128_decipher_block(&ctx->core.speck, input, block);
         if (ctx->spec->mode == EVP_CIPH_CBC_MODE) {
@@ -323,9 +321,11 @@ static int block_update(cipher_ctx *ctx, unsigned char *out, size_t *out_length,
     uint8_t *input_copy = NULL;
     size_t original_length = length;
 
-    if (length > SIZE_MAX - ctx->pending_length) return cipher_error("input length overflow");
+    if (length > SIZE_MAX - ctx->pending_length)
+        return cipher_error("input length overflow");
     total = ctx->pending_length + length;
     blocks = total / 16;
+    // deixa o ultimo bloco para o final quando ha padding na decifragem
     if (!ctx->encrypting && ctx->padding && total != 0) {
         blocks = (total - 1) / 16;
     }
@@ -333,7 +333,7 @@ static int block_update(cipher_ctx *ctx, unsigned char *out, size_t *out_length,
         return cipher_error("output buffer is too small");
     }
 
-    // Buffered bytes can make in-place output overtake unread input.
+    // copia o input para nao dar overwrite com bytes pendentes
     if (out == input && ctx->pending_length != 0 && length != 0) {
         input_copy = OPENSSL_memdup(input, length);
         if (input_copy == NULL) return 0;
@@ -342,7 +342,6 @@ static int block_update(cipher_ctx *ctx, unsigned char *out, size_t *out_length,
     while (length != 0) {
         size_t take;
 
-        // A padded decryption retains its last block until more input or final.
         if (ctx->pending_length == 16) {
             process_block(ctx, ctx->pending, out + written);
             written += 16;
@@ -373,12 +372,14 @@ static int ctr_can_process(const cipher_ctx *ctx, size_t length){
     size_t blocks;
     size_t carry;
 
-    if (length <= cached) return 1;
+    if (length <= cached)
+        return 1;
     remaining = length - cached;
     blocks = remaining / 16 + (remaining % 16 != 0);
-    if (ctx->counter_exhausted) return cipher_error("CTR counter exhausted");
+    if (ctx->counter_exhausted)
+        return cipher_error("CTR counter exhausted");
 
-    // Check the last counter required by this request before producing output.
+    // verifica se o contador vai dar a volta antes de escrever
     memcpy(last_counter, ctx->iv, sizeof(last_counter));
     carry = blocks - 1;
     for (int i = 15; i >= 0; --i) {
@@ -395,7 +396,7 @@ static void ctr_update(cipher_ctx *ctx, const uint8_t *input, uint8_t *out, size
             speck128_cipher_block(&ctx->core.speck, ctx->iv, ctx->keystream);
             ctx->stream_position = 0;
 
-            // The IV is a 128-bit big-endian counter, incremented after use.
+            // contador big-endian, soma a partir do ultimo byte
             for (int j = 15; j >= 0; --j) {
                 if (++ctx->iv[j] != 0) break;
                 if (j == 0) ctx->counter_exhausted = 1;
@@ -467,7 +468,7 @@ static int cipher_final(void *vctx, unsigned char *out, size_t *out_length, size
         process_block(&next, ctx->pending, block);
         padding = block[15];
         invalid = (padding == 0 || padding > 16);
-        // Check all 16 positions without stopping at the first wrong byte.
+        // verifica os 16 bytes mesmo que ja tenha encontrado um erro
         for (unsigned int i = 0; i < 16; ++i) {
             unsigned int mask = 0u - (unsigned int)(i < padding);
             invalid |= ((unsigned int)block[15 - i] ^ padding) & mask;
@@ -503,7 +504,7 @@ static int cipher_raw(void *vctx, unsigned char *out, size_t *out_length, size_t
     cipher_ctx next = *ctx;
     int result;
 
-    // EVP_Cipher is the raw, unpadded interface, unlike update/final.
+    // EVP_Cipher nao usa padding
     if (ctx->pending_length != 0 || length % ctx->spec->block_size != 0) {
         if (out_length != NULL) *out_length = 0;
         return cipher_error("raw cipher input must contain complete blocks");
@@ -518,7 +519,6 @@ static int cipher_raw(void *vctx, unsigned char *out, size_t *out_length, size_t
     return result;
 }
 
-// The callbacks are shared; creation and metadata select the specific cipher.
 const OSSL_DISPATCH speck_ecb_functions[] = {
     {OSSL_FUNC_CIPHER_NEWCTX, (void (*)(void))ecb_newctx},
     {OSSL_FUNC_CIPHER_FREECTX, (void (*)(void))cipher_freectx},

@@ -4,6 +4,9 @@ Two-person Applied Cryptography project using **SPECK128/128** and **Trivium**.
 The goal is a provider loaded by the standard, unmodified `openssl` command.
 This repository contains the source and instructions needed to build and use it.
 
+See [FLOW.md](FLOW.md) for the build and file-encryption diagrams, the role of
+each source file and the implementation references.
+
 The provider implements SPECK ECB/CBC/CTR and Trivium, including streaming,
 padding and context duplication. Loading, known answers, CLI file operations
 and compatibility with `openssl speed` have been checked. Final comparative
@@ -90,3 +93,4 @@ openssl speed -provider-path . -provider default -provider ca -evp SPECK128-128-
   parameters connecting the cores to OpenSSL.
 - `CMakeLists.txt`: build configuration.
 - `.gitignore`: excludes generated build files from version control.
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): licence notice for the Trivium reference.

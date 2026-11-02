@@ -1,14 +1,9 @@
-/*
- * SPECK128/128, written from the designers' algorithm and reference routines:
- * Beaulieu et al., SIMON and SPECK Implementation Guide (15 January 2019),
- * sections 1, 6 and 16.
- * https://nsacyber.github.io/simon-speck/implementations/ImplementationGuide1.1.pdf
- * Attribution and byte conventions are also recorded in REPORT_NOTES.md.
- */
+// adaptado de Beaulieu et al., SIMON and SPECK Implementation Guide (2019), sec. 1 e 6
+// https://nsacyber.github.io/simon-speck/implementations/ImplementationGuide1.1.pdf
 #include "speck128.h"
 #include <stddef.h>
 
-// APENAS ACEITA VALORES ENTRE 0 e 64
+// count tem de ficar entre 1 e 63
 static uint64_t rotate_left(uint64_t word, unsigned int count){
     return (word << count) | (word >> (64 - count));
 }
@@ -48,18 +43,19 @@ static void speck_inverse_round(uint64_t *x, uint64_t *y, uint64_t round_key){
     *x = rotate_left(*x, 8);
 }
 
+//expande a chave original para 32 subchaves de 64 bits
 void speck128_init(speck128_ctx *ctx,const uint8_t key[SPECK128_KEY_BYTES]){
-    uint64_t round_key = load_le64(key);
-    uint64_t other_word = load_le64(key + 8);
+    uint64_t a = load_le64(key);
+    uint64_t b = load_le64(key + 8);
 
-    ctx->round_keys[0] = round_key;
     for (size_t i = 0; i < SPECK128_ROUNDS - 1; ++i) {
-        /* The key schedule reuses the round, using its index as the key. */
-        speck_round(&other_word, &round_key, (uint64_t)i);
-        ctx->round_keys[i + 1] = round_key;
+        ctx->round_keys[i] = a;
+        speck_round(&b, &a, (uint64_t)i);
     }
+    ctx->round_keys[SPECK128_ROUNDS - 1] = a;
 }
 
+// pega num bloco e aplica as 32 rondas e guarda o resultado
 void speck128_cipher_block(const speck128_ctx *ctx, const uint8_t input[SPECK128_BLOCK_BYTES],
                             uint8_t output[SPECK128_BLOCK_BYTES]){
 
@@ -74,6 +70,7 @@ void speck128_cipher_block(const speck128_ctx *ctx, const uint8_t input[SPECK128
     store_le64(output + 8, x);
 }
 
+//inverso
 void speck128_decipher_block(const speck128_ctx *ctx, const uint8_t input[SPECK128_BLOCK_BYTES],
                             uint8_t output[SPECK128_BLOCK_BYTES]){
 

@@ -1,6 +1,4 @@
-/* Provider interface follows OpenSSL's public provider-base API:
- * https://docs.openssl.org/3.5/man7/provider-base/
- */
+// API do provider: https://docs.openssl.org/3.5/man7/provider-base/
 #include "provider_cipher.h"
 #include <openssl/core_dispatch.h>
 #include <openssl/core_names.h>
